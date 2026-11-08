@@ -1,0 +1,17 @@
+{{- $components := list "product-service" "user-service" "cart-service" "order-service" "payment-service" "notification-service" "api-gateway" "frontend" }}
+{{- range $components }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ . }}
+  namespace: {{ include "shopsphere.namespace" $ }}
+  labels:
+    {{- include "shopsphere.commonLabels" $ | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "shopsphere.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ . }}
+---
+{{- end }}

@@ -1,0 +1,228 @@
+name: ShopSphere Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment that receives the new images"
+        type: choice
+        required: true
+        default: dev
+        options:
+          - dev
+          - qa
+          - uat
+
+permissions:
+  contents: write
+  id-token: write
+  security-events: write
+  pull-requests: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  gitleaks:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test:
+    name: Unit tests ${{ matrix.name }}
+    needs: gitleaks
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: product-service
+            workdir: app/services/product-service
+            setup: go
+          - name: order-service
+            workdir: app/services/order-service
+            setup: go
+          - name: user-service
+            workdir: app/services/user-service
+            setup: node
+          - name: cart-service
+            workdir: app/services/cart-service
+            setup: node
+          - name: payment-service
+            workdir: app/services/payment-service
+            setup: python
+          - name: notification-service
+            workdir: app/services/notification-service
+            setup: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        if: matrix.setup == 'go'
+        with:
+          go-version: "1.22"
+      - uses: actions/setup-node@v4
+        if: matrix.setup == 'node'
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        if: matrix.setup == 'python'
+        with:
+          python-version: "3.12"
+      - name: Run tests
+        working-directory: ${{ matrix.workdir }}
+        run: |
+          set -euo pipefail
+          case "${{ matrix.setup }}" in
+            go) go test ./... ;;
+            node) npm ci && npm test ;;
+            python) pip install -r requirements.txt && pytest ;;
+          esac
+
+  sonar:
+    name: SonarQube
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: SonarQube scan
+        uses: sonarsource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: [gitleaks, test, sonar]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: frontend
+            context: app/frontend
+            suffix: frontend
+          - name: api-gateway
+            context: app/api-gateway
+            suffix: api-gateway
+          - name: product-service
+            context: app/services/product-service
+            suffix: product-service
+          - name: user-service
+            context: app/services/user-service
+            suffix: user-service
+          - name: cart-service
+            context: app/services/cart-service
+            suffix: cart-service
+          - name: order-service
+            context: app/services/order-service
+            suffix: order-service
+          - name: payment-service
+            context: app/services/payment-service
+            suffix: payment-service
+          - name: notification-service
+            context: app/services/notification-service
+            suffix: notification-service
+          - name: seed
+            context: app/seed-job
+            suffix: seed
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select ECR role
+        id: role
+        env:
+          ROLE_DEV: ${{ vars.AWS_ECR_ROLE_ARN_DEV }}
+          ROLE_QA: ${{ vars.AWS_ECR_ROLE_ARN_QA }}
+          ROLE_UAT: ${{ vars.AWS_ECR_ROLE_ARN_UAT }}
+          APP_ENV: ${{ inputs.environment || 'dev' }}
+        run: |
+          set -euo pipefail
+          case "${APP_ENV}" in
+            dev) role_arn="$ROLE_DEV" ;;
+            qa) role_arn="$ROLE_QA" ;;
+            uat) role_arn="$ROLE_UAT" ;;
+            *) echo "::error::Unknown environment ${APP_ENV}"; exit 1 ;;
+          esac
+          if [[ -z "${role_arn}" ]]; then
+            echo "::error::Set AWS_ECR_ROLE_ARN_$(echo "${APP_ENV}" | tr '[:lower:]' '[:upper:]')"
+            exit 1
+          fi
+          echo "role_arn=${role_arn}" >> "$GITHUB_OUTPUT"
+          echo "environment=${APP_ENV}" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.role.outputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        id: image
+        env:
+          APP_ENV: ${{ steps.role.outputs.environment }}
+          SUFFIX: ${{ matrix.suffix }}
+          CONTEXT: ${{ matrix.context }}
+        run: |
+          set -euo pipefail
+          account=$(aws sts get-caller-identity --query Account --output text)
+          image="${account}.dkr.ecr.${AWS_REGION}.amazonaws.com/${APP_ENV}-shopsphere-${SUFFIX}:${GITHUB_SHA}"
+          docker buildx build --platform linux/amd64 --load --tag "$image" "$CONTEXT"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.image.outputs.image }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Push image
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          registry="${IMAGE%%/*}"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$registry"
+          docker push "$IMAGE"
+
+  update-tags:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write image tags
+        env:
+          APP_ENV: ${{ inputs.environment || 'dev' }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          file="environments/${APP_ENV}/values.yaml"
+          sed -i -E "s/(tag: \")[^\"]+/\1${IMAGE_TAG}/" "$file"
+      - name: Commit tags
+        env:
+          APP_ENV: ${{ inputs.environment || 'dev' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "environments/${APP_ENV}/values.yaml"
+          git diff --staged --quiet && exit 0
+          git commit -m "Update ${APP_ENV} image tags."
+          git push

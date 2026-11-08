@@ -1,0 +1,21 @@
+# Prod app-of-apps.
+# kubectl apply this on the prod cluster, in prod-argocd.
+# It only watches shopsphere/gitops/apps/prod — dest YAML is not in this path.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shopsphere-app-of-apps
+  namespace: prod-argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Johnson9393/InfraProjects.git
+    targetRevision: main
+    path: shopsphere/gitops/apps/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod-argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

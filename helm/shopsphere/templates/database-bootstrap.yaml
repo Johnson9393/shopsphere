@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "shopsphere.fullname" . }}-create-databases
+  namespace: {{ include "shopsphere.namespace" . }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-weight: "-20"
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: create-databases
+          image: postgres:15-alpine
+          env:
+            - name: PGHOST
+              valueFrom:
+                secretKeyRef:
+                  name: aurora-credentials
+                  key: host
+            - name: PGPORT
+              valueFrom:
+                secretKeyRef:
+                  name: aurora-credentials
+                  key: port
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: aurora-credentials
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aurora-credentials
+                  key: password
+            - name: PGDATABASE
+              value: postgres
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              prefix="{{ .Values.global.environment }}"
+              for suffix in products users orders payments; do
+                name="${prefix}_${suffix}"
+                exists=$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '${name}'")
+                if [ "$exists" != "1" ]; then
+                  psql -c "CREATE DATABASE ${name}"
+                fi
+              done

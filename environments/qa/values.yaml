@@ -1,0 +1,60 @@
+global:
+  environment: qa
+  namespace: shopsphere-qa
+  awsRegion: us-east-1
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+
+services:
+  productService:
+    env:
+      PRODUCT_DB_NAME: qa_products
+      PRODUCT_DB_SSLMODE: require
+    image:
+      repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/qa-shopsphere-product-service
+      tag: "1.0.0"
+  userService:
+    env:
+      USER_DB_NAME: qa_users
+      USER_DB_SSLMODE: require
+    image:
+      repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/qa-shopsphere-user-service
+      tag: "1.0.0"
+  cartService:
+    image:
+      repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/qa-shopsphere-cart-service
+      tag: "1.0.0"
+  orderService:
+    env:
+      ORDER_DB_NAME: qa_orders
+      ORDER_DB_SSLMODE: require
+    image:
+      repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/qa-shopsphere-order-service
+      tag: "1.0.0"
+  paymentService:
+    env:
+      PAYMENT_DB_NAME: qa_payments
+      PAYMENT_DB_SSLMODE: require
+    image:
+      repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/qa-shopsphere-payment-service
+      tag: "1.0.0"
+  notificationService:
+    serviceAccount:
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::071138597726:role/qa-shopsphere-notification
+    image:
+      repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/qa-shopsphere-notification-service
+      tag: "1.0.0"
+
+apiGateway:
+  image:
+    repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/qa-shopsphere-api-gateway
+    tag: "1.0.0"
+
+frontend:
+  image:
+    repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/qa-shopsphere-frontend
+    tag: "1.0.0"
