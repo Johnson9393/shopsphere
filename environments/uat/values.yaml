@@ -42,9 +42,6 @@ services:
       repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/uat-shopsphere-payment-service
       tag: "1.0.0"
   notificationService:
-    serviceAccount:
-      annotations:
-        eks.amazonaws.com/role-arn: arn:aws:iam::071138597726:role/uat-shopsphere-notification
     image:
       repository: 071138597726.dkr.ecr.us-east-1.amazonaws.com/uat-shopsphere-notification-service
       tag: "1.0.0"
