@@ -1,5 +1,14 @@
 # ShopSphere
 
+
+![Traffic from DNS to the pod](docs/traffic.svg)
+
+![Infrastructure availability, scale, and failure](docs/platform.svg)
+
+![DevSecOps pipeline](docs/pipeline.svg)
+
+
+
 This repository is the original combined application chart. The running platform no longer deploys it as one release.
 
 - Platform: [shopsphere-infra](https://github.com/Johnson9393/shopsphere-infra)
