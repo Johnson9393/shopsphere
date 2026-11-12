@@ -33,4 +33,4 @@ The platform is multi-AZ in every environment. Pre-prod and prod add an Aurora r
 # shopsphere
 ShopSphere application, Helm, and GitHub Actions
 
-Images and the private image buckets are copied to `us-west-1` as well as to the other account. Every environment rotates database, Redis, queue, and JWT passwords every 30 days with a Lambda. The application stores image URLs. It does not upload files, so there is no virus scan.
+Images and the private image buckets are copied to `us-west-1` as well as to the other account. Every environment rotates database, Redis, queue, and JWT passwords every 7 days with a Lambda. The application stores image URLs. It does not upload files, so there is no virus scan.
