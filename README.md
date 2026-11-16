@@ -1,36 +1,11 @@
 # ShopSphere
 
+This repository is the original combined application. It is not deployed.
 
-![Traffic from DNS to the pod](docs/traffic.svg)
-
-![Infrastructure availability, scale, and failure](docs/platform.svg)
-
-![DevSecOps pipeline](docs/pipeline.svg)
-
-
-
-This repository is the original combined application chart. The running platform no longer deploys it as one release. The live services are Java 21 and Spring Boot, the frontend is React, and events are Avro on MSK.
+The running platform is split by service:
 
 - Platform: [shopsphere-infra](https://github.com/Johnson9393/shopsphere-infra)
-- One repository per service, each with its own chart and CI
+- Product, user, cart, order, payment, notification, and the React frontend, each in its own repository
 - Desired state: [shopsphere-gitops](https://github.com/Johnson9393/shopsphere-gitops)
-- Argo CD installs the per-service charts.
 
-```mermaid
-flowchart TD
-  browser[Browser] --> dns[Route 53]
-  dns --> cf[CloudFront]
-  cf --> alb[ALB]
-  alb --> gw[api-gateway]
-  gw --> pods[Service pods]
-  pods --> aurora[Aurora through RDS Proxy]
-```
-
-The platform is multi-AZ in every environment. Pre-prod and prod add an Aurora reader in `us-west-1`. Account numbers in docs show the last four digits only.
- The database bootstrap in `helm/shopsphere` remains the reference for how each environment's databases and logins are created.
-
-
-# shopsphere
-ShopSphere application, Helm, and GitHub Actions
-
-Images and the private image buckets are copied to `us-west-1` as well as to the other account. Every environment creates the database password, the queue password, and the JWT with a Lambda. Terraform stores the secret name. External Secrets mounts the value. Redis uses IAM authentication, so no Redis password is stored. The Lambda rotates those passwords every 7 days. The application stores image URLs. It does not upload files, so there is no virus scan.
+Amazon API Gateway is the public API edge. The services are Java 21 and Spring Boot. The frontend is React. Events are Avro on MSK.
