@@ -9,7 +9,7 @@
 
 
 
-This repository is the original combined application chart. The running platform no longer deploys it as one release.
+This repository is the original combined application chart. The running platform no longer deploys it as one release. The live services are Java 21 and Spring Boot, the frontend is React, and events are Avro on MSK.
 
 - Platform: [shopsphere-infra](https://github.com/Johnson9393/shopsphere-infra)
 - One repository per service, each with its own chart and CI
